@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>دمج الكواكب</title>
+<style>
+html,body{margin:0;height:100%;background:#070514;overflow:hidden;font-family:system-ui,Tahoma,sans-serif;color:#fff;touch-action:none;-webkit-user-select:none;user-select:none}
+canvas{display:block;width:100%;height:100%}
+.ov{position:fixed;inset:0;z-index:10;background:rgba(7,5,20,.95);display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:30px 14px;box-sizing:border-box;text-align:center;overflow:auto}
+.ov.hide{display:none}
+h1{margin:0;font-size:42px;background:linear-gradient(90deg,#6cf,#c6f,#fd6);-webkit-background-clip:text;color:transparent}
+p{max-width:330px;line-height:1.5;opacity:.9;margin:6px}
+button{font:inherit;font-size:20px;font-weight:700;color:#fff;background:linear-gradient(135deg,#5a6bff,#d23c9a);border:0;border-radius:14px;padding:12px 30px;margin:8px;box-shadow:0 4px 16px #d23c9a55}
+button.s{font-size:15px;background:#25204a;box-shadow:none;padding:8px 18px}
+.chain{display:flex;flex-wrap:wrap;gap:4px;justify-content:center;max-width:330px;margin:8px}
+.chain canvas{width:34px;height:34px}
+</style></head><body>
+<canvas id="c"></canvas>
+<div class="ov" id="menu"><h1>دمج الكواكب</h1><p>نزّل الكواكب جوه الصندوق. كوكبين زي بعض لما يتلامسوا بيدمجوا في كوكب أكبر. وصّل لحد الثقب الأسود. لو الكواكب عدّت الخط الأحمر لفترة، تخسر.</p><div class="chain" id="chain"></div><p id="best"></p><button id="play">ابدأ</button><button class="s" id="snd"></button></div>
+<div class="ov hide" id="over"><h1>خلصت!</h1><p id="res"></p><button id="again">العب تاني</button><button class="s" id="tomenu">القايمة</button></div>
+<script>
+const cv=document.getElementById('c'),g=cv.getContext('2d');let W,H,DPR,BX,BY,BW,BH,SC;
+const SVK='planet_merge_v1';let sv={best:0,snd:1,games:0,maxLv:0};try{Object.assign(sv,JSON.parse(localStorage.getItem(SVK)||'{}'))}catch(e){}
+const persist=()=>{try{localStorage.setItem(SVK,JSON.stringify(sv))}catch(e){}};
+const PL=[{n:'نيزك',r:15,c:['#b9a58c','#6b5a48']},{n:'قمر',r:20,c:['#e8e8ee','#8a8a99']},{n:'عطارد',r:26,c:['#d9a066','#7a4a2a']},{n:'مريخ',r:32,c:['#ff7a52','#8a2a14']},{n:'زهرة',r:39,c:['#ffd27a','#b06a10']},{n:'أرض',r:46,c:['#5ab8ff','#1b5a2a']},{n:'نبتون',r:54,c:['#4a7cff','#16206a']},{n:'زحل',r:62,c:['#f3d28a','#8a6a2a']},{n:'مشتري',r:71,c:['#e0a070','#703a20']},{n:'شمس',r:80,c:['#fff27a','#ff7a00']},{n:'ثقب أسود',r:90,c:['#2a003a','#000']}];
+let AC;function beep(f,d,t,v,sl){if(!sv.snd)return;try{AC=AC||new(window.AudioContext||window.webkitAudioContext)();const o=AC.createOscillator(),gn=AC.createGain();o.type=t||'sine';o.frequency.value=f;if(sl)o.frequency.exponentialRampToValueAtTime(Math.max(40,f*sl),AC.currentTime+d);gn.gain.value=v||.06;gn.gain.exponentialRampToValueAtTime(.0001,AC.currentTime+d);o.connect(gn);gn.connect(AC.destination);o.start();o.stop(AC.currentTime+d)}catch(e){}}
+function rs(){DPR=Math.min(devicePixelRatio||1,2);W=innerWidth;H=innerHeight;cv.width=W*DPR;cv.height=H*DPR;
+ // logical box 360 x 520 scaled
+ SC=Math.min((W-16)/360,(H-130)/520);BW=360*SC;BH=520*SC;BX=(W-BW)/2;BY=H-BH-12}
+addEventListener('resize',rs);rs();
+let B=[],score=0,over=false,running=false,cur,next,aimX=180,cool=0,parts=[],t=0,comboT=0,combo=0,chainBest=0,warn=0,shake=0,texts=[],drops=0;
+const R=(a,b)=>a+Math.random()*(b-a);
+function rl(){const m=Math.min(4,Math.floor(drops/12)+2);return Math.floor(Math.random()*m)}
+function newGame(){B=[];score=0;over=false;parts=[];texts=[];cool=0;drops=0;combo=0;warn=0;cur=rl();next=rl();aimX=180;running=true;document.getElementById('menu').classList.add('hide');document.getElementById('over').classList.add('hide');last=performance.now();requestAnimationFrame(loop)}
+function drop(){if(over||cool>0)return;const r=PL[cur].r;const x=Math.max(r+3,Math.min(360-r-3,aimX));B.push({x,y:30+r*0,vx:0,vy:0,l:cur,r,age:0,id:Math.random()});cur=next;next=rl();cool=.45;drops++;beep(300,.08,'triangle',.05)}
+function pos(e){const r=cv.getBoundingClientRect();return[(e.clientX-r.left-BX)/SC,(e.clientY-r.top-BY)/SC]}
+cv.addEventListener('pointerdown',e=>{if(!running||over)return;const[x]=pos(e);aimX=x;cv.setPointerCapture(e.pointerId);cv._d=1});
+cv.addEventListener('pointermove',e=>{if(!running||over)return;if(cv._d){aimX=pos(e)[0]}});
+cv.addEventListener('pointerup',e=>{if(!cv._d)return;cv._d=0;drop()});
+addEventListener('keydown',e=>{if(e.key==='ArrowLeft')aimX-=12;if(e.key==='ArrowRight')aimX+=12;if(e.key===' ')drop()});
+function burst(x,y,c,n){for(let i=0;i<n;i++){const a=R(0,6.28),v=R(40,200);parts.push({x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v,l:R(.3,.7),m:.7,c,s:R(2,5)})}}
+function step(dt){t+=dt;if(cool>0)cool-=dt;const SUB=4,h=dt/SUB;
+ for(let s=0;s<SUB;s++){
+  for(const b of B){b.vy+=1400*h;b.x+=b.vx*h;b.y+=b.vy*h;b.vx*=.9985;b.age+=h;
+   if(b.x<b.r){b.x=b.r;b.vx*=-.3}if(b.x>360-b.r){b.x=360-b.r;b.vx*=-.3}if(b.y>520-b.r){b.y=520-b.r;b.vy*=-.25;b.vx*=.98}}
+  for(let i=0;i<B.length;i++)for(let j=i+1;j<B.length;j++){const a=B[i],b=B[j];const dx=b.x-a.x,dy=b.y-a.y,d2=dx*dx+dy*dy,rr=a.r+b.r;if(d2<rr*rr&&d2>0.0001){const d=Math.sqrt(d2),nx=dx/d,ny=dy/d,ov=rr-d;
+     if(a.l===b.l&&!a.dead&&!b.dead&&a.l<10){a.dead=b.dead=true;merge(a,b);continue}
+     const ma=a.r*a.r,mb=b.r*b.r,tm=ma+mb;a.x-=nx*ov*mb/tm;a.y-=ny*ov*mb/tm;b.x+=nx*ov*ma/tm;b.y+=ny*ov*ma/tm;
+     const rvx=b.vx-a.vx,rvy=b.vy-a.vy,vn=rvx*nx+rvy*ny;if(vn<0){const im=(1+.2)*vn/(1/ma+1/mb);a.vx+=im/ma*nx;a.vy+=im/ma*ny;b.vx-=im/mb*nx;b.vy-=im/mb*ny}}}
+  B=B.filter(b=>!b.dead);
+  if(newB.length){B.push(...newB);newB=[]}}
+ // lose line
+ let above=false;for(const b of B)if(b.age>1&&b.y-b.r<60&&Math.abs(b.vy)<60)above=true;
+ warn=above?warn+dt:Math.max(0,warn-dt*2);if(warn>2.5&&!over)end();
+ if(comboT>0){comboT-=dt;if(comboT<=0)combo=0}
+ for(const p of parts){p.x+=p.vx*dt;p.y+=p.vy*dt;p.l-=dt}parts=parts.filter(p=>p.l>0);for(const x of texts)x.l-=dt;texts=texts.filter(x=>x.l>0);shake=Math.max(0,shake-dt*3)}
+let newB=[];
+function merge(a,b){const l=a.l+1;const x=(a.x+b.x)/2,y=(a.y+b.y)/2;combo++;comboT=1.2;const gain=(l+1)*(l+1)*combo;score+=gain;
+ if(l>=10){score+=500;texts.push({x,y,t:'ثقب أسود! +500',l:1.6,c:'#c6f'});burst(x,y,'#c6f',50);shake=1;beep(80,.8,'sawtooth',.1,3);sv.maxLv=10;return}
+ if(l>sv.maxLv){sv.maxLv=l}
+ newB.push({x,y,vx:(a.vx+b.vx)/2,vy:(a.vy+b.vy)/2-40,l,r:PL[l].r,age:2,id:Math.random()});texts.push({x,y:y-PL[l].r,t:'+'+gain+(combo>1?' x'+combo:''),l:1,c:'#fd6'});burst(x,y,PL[l].c[0],14);shake=Math.max(shake,.2*(l/5));beep(260+l*55,.18,'sine',.07,1.5)}
+function end(){over=true;sv.games++;const nb=score>sv.best;if(nb)sv.best=score;persist();beep(120,.8,'sawtooth',.08,.4);setTimeout(()=>{document.getElementById('res').innerHTML='النتيجة: <b>'+score+'</b><br>أعلى نتيجة: '+sv.best+(nb?' 🏆 رقم قياسي!':'')+'<br>أكبر كوكب وصلت له: '+PL[sv.maxLv].n;document.getElementById('over').classList.remove('hide')},800)}
+function planet(ctx,x,y,l,r){const p=PL[l];const gr=ctx.createRadialGradient(x-r*.35,y-r*.35,r*.1,x,y,r);gr.addColorStop(0,p.c[0]);gr.addColorStop(1,p.c[1]);ctx.fillStyle=gr;ctx.beginPath();ctx.arc(x,y,r,0,6.3);ctx.fill();
+ if(l===7){ctx.strokeStyle='rgba(255,240,200,.7)';ctx.lineWidth=r*.1;ctx.beginPath();ctx.ellipse(x,y,r*1.2,r*.3,-.4,0,6.3);ctx.stroke()}
+ if(l===9){ctx.strokeStyle='rgba(255,200,0,.5)';ctx.lineWidth=3;ctx.beginPath();ctx.arc(x,y,r+4,0,6.3);ctx.stroke()}
+ if(l===10){ctx.strokeStyle='#c6f';ctx.lineWidth=3;ctx.beginPath();ctx.arc(x,y,r-1,0,6.3);ctx.stroke()}
+ if(l===5){ctx.fillStyle='rgba(60,170,80,.8)';ctx.beginPath();ctx.arc(x-r*.25,y+r*.1,r*.35,0,6.3);ctx.fill()}
+ if(l===3||l===8){ctx.fillStyle='rgba(0,0,0,.15)';ctx.beginPath();ctx.ellipse(x,y+r*.2,r*.8,r*.14,0,0,6.3);ctx.fill()}}
+let stars=[];for(let i=0;i<60;i++)stars.push([Math.random(),Math.random(),Math.random()*1.5+.3]);
+function draw(){g.setTransform(DPR,0,0,DPR,0,0);g.fillStyle='#070514';g.fillRect(0,0,W,H);g.fillStyle='#fff';for(const s of stars){g.globalAlpha=.3+.5*Math.abs(Math.sin(t+s[0]*9));g.fillRect(s[0]*W,s[1]*H,s[2],s[2])}g.globalAlpha=1;
+ g.save();if(shake>0)g.translate((Math.random()-.5)*8*shake,(Math.random()-.5)*8*shake);g.translate(BX,BY);g.scale(SC,SC);
+ g.fillStyle='rgba(30,25,70,.55)';g.fillRect(0,0,360,520);g.strokeStyle='#6a5acd';g.lineWidth=3;g.strokeRect(0,0,360,520);
+ g.strokeStyle=warn>0?'rgba(255,60,60,'+(.5+.5*Math.sin(t*12))+')':'rgba(255,90,90,.35)';g.setLineDash([8,8]);g.beginPath();g.moveTo(0,60);g.lineTo(360,60);g.stroke();g.setLineDash([]);
+ for(const b of B)planet(g,b.x,b.y,b.l,b.r);
+ if(!over){g.globalAlpha=.9;const r=PL[cur].r;const ax=Math.max(r+3,Math.min(360-r-3,aimX));g.strokeStyle='rgba(255,255,255,.25)';g.setLineDash([4,6]);g.beginPath();g.moveTo(ax,30+r);g.lineTo(ax,520);g.stroke();g.setLineDash([]);if(cool<=0)planet(g,ax,30,cur,r);g.globalAlpha=1}
+ for(const p of parts){g.globalAlpha=Math.max(0,p.l/p.m);g.fillStyle=p.c;g.fillRect(p.x,p.y,p.s,p.s)}g.globalAlpha=1;
+ g.font='700 18px system-ui';g.textAlign='center';for(const x of texts){g.globalAlpha=Math.min(1,x.l);g.fillStyle=x.c;g.fillText(x.t,x.x,x.y-(1-x.l)*30)}g.globalAlpha=1;
+ g.restore();
+ g.fillStyle='#fff';g.textAlign='center';g.font='700 28px system-ui';g.fillText(score,W/2,38);g.font='13px system-ui';g.fillStyle='#aab';g.fillText('أعلى: '+sv.best,W/2,58);
+ g.textAlign='left';g.font='12px system-ui';g.fillStyle='#aab';g.fillText('الجاي',12,30);planet(g,30,58,next,Math.min(PL[next].r,22)*.9);
+ if(combo>1){g.textAlign='right';g.fillStyle='#fd6';g.font='700 18px system-ui';g.fillText('كومبو x'+combo,W-12,34)}}
+let last=0;function loop(ts){if(!running)return;const dt=Math.min(.033,(ts-last)/1000||.016);last=ts;step(dt);draw();requestAnimationFrame(loop)}
+function menu(){running=false;document.getElementById('over').classList.add('hide');document.getElementById('menu').classList.remove('hide');document.getElementById('best').textContent='أعلى نتيجة: '+sv.best+' · ألعاب: '+sv.games+' · أكبر كوكب: '+PL[sv.maxLv].n;const el=document.getElementById('chain');el.innerHTML='';PL.forEach((p,i)=>{const c=document.createElement('canvas');c.width=c.height=68;const x=c.getContext('2d');planet(x,34,34,i,Math.min(30,8+i*2.6));el.appendChild(c);});document.getElementById('snd').textContent=sv.snd?'🔊 الصوت: شغال':'🔇 الصوت: مقفول'}
+document.getElementById('play').onclick=newGame;document.getElementById('again').onclick=newGame;document.getElementById('tomenu').onclick=menu;
+document.getElementById('snd').onclick=()=>{sv.snd=sv.snd?0:1;persist();menu()};
+menu();rs();
+window.__t={newGame,drop,step,draw,state:()=>({B,score,over,warn,combo}),setAim:x=>aimX=x};
+</script></body></html>
