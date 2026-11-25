@@ -13,13 +13,15 @@ button{font:inherit;font-size:20px;font-weight:700;color:#fff;background:linear-
 button.s{font-size:15px;background:#25204a;box-shadow:none;padding:8px 18px}
 .chain{display:flex;flex-wrap:wrap;gap:4px;justify-content:center;max-width:330px;margin:8px}
 .chain canvas{width:34px;height:34px}
+#bomb{position:fixed;left:10px;top:92px;z-index:5;font-size:16px;padding:10px 16px;background:linear-gradient(135deg,#ff6a3d,#c2185b)}#bomb.off{opacity:.35;filter:grayscale(1)}
 </style></head><body>
 <canvas id="c"></canvas>
-<div class="ov" id="menu"><h1>دمج الكواكب</h1><p>نزّل الكواكب جوه الصندوق. كوكبين زي بعض لما يتلامسوا بيدمجوا في كوكب أكبر. وصّل لحد الثقب الأسود. لو الكواكب عدّت الخط الأحمر لفترة، تخسر.</p><div class="chain" id="chain"></div><p id="best"></p><button id="play">ابدأ</button><button class="s" id="snd"></button></div>
+<button id="bomb" class="off">💣 <span id="bn">0</span></button>
+<div class="ov" id="menu"><h1>دمج الكواكب</h1><p>💣 كل 1500 نقطة بتاخد قنبلة بتمسح الكواكب الصغيرة (نيزك وقمر وعطارد).</p><p>نزّل الكواكب جوه الصندوق. كوكبين زي بعض لما يتلامسوا بيدمجوا في كوكب أكبر. وصّل لحد الثقب الأسود. لو الكواكب عدّت الخط الأحمر لفترة، تخسر.</p><div class="chain" id="chain"></div><p id="best"></p><button id="play">ابدأ</button><button class="s" id="snd"></button></div>
 <div class="ov hide" id="over"><h1>خلصت!</h1><p id="res"></p><button id="again">العب تاني</button><button class="s" id="tomenu">القايمة</button></div>
 <script>
 const cv=document.getElementById('c'),g=cv.getContext('2d');let W,H,DPR,BX,BY,BW,BH,SC;
-const SVK='planet_merge_v1';let sv={best:0,snd:1,games:0,maxLv:0};try{Object.assign(sv,JSON.parse(localStorage.getItem(SVK)||'{}'))}catch(e){}
+const SVK='planet_merge_v1';let sv={seen:{},best:0,snd:1,games:0,maxLv:0};try{Object.assign(sv,JSON.parse(localStorage.getItem(SVK)||'{}'))}catch(e){}
 const persist=()=>{try{localStorage.setItem(SVK,JSON.stringify(sv))}catch(e){}};
 const PL=[{n:'نيزك',r:15,c:['#b9a58c','#6b5a48']},{n:'قمر',r:20,c:['#e8e8ee','#8a8a99']},{n:'عطارد',r:26,c:['#d9a066','#7a4a2a']},{n:'مريخ',r:32,c:['#ff7a52','#8a2a14']},{n:'زهرة',r:39,c:['#ffd27a','#b06a10']},{n:'أرض',r:46,c:['#5ab8ff','#1b5a2a']},{n:'نبتون',r:54,c:['#4a7cff','#16206a']},{n:'زحل',r:62,c:['#f3d28a','#8a6a2a']},{n:'مشتري',r:71,c:['#e0a070','#703a20']},{n:'شمس',r:80,c:['#fff27a','#ff7a00']},{n:'ثقب أسود',r:90,c:['#2a003a','#000']}];
 let AC;function beep(f,d,t,v,sl){if(!sv.snd)return;try{AC=AC||new(window.AudioContext||window.webkitAudioContext)();const o=AC.createOscillator(),gn=AC.createGain();o.type=t||'sine';o.frequency.value=f;if(sl)o.frequency.exponentialRampToValueAtTime(Math.max(40,f*sl),AC.currentTime+d);gn.gain.value=v||.06;gn.gain.exponentialRampToValueAtTime(.0001,AC.currentTime+d);o.connect(gn);gn.connect(AC.destination);o.start();o.stop(AC.currentTime+d)}catch(e){}}
@@ -27,10 +29,13 @@ function rs(){DPR=Math.min(devicePixelRatio||1,2);W=innerWidth;H=innerHeight;cv.
  // logical box 360 x 520 scaled
  SC=Math.min((W-16)/360,(H-130)/520);BW=360*SC;BH=520*SC;BX=(W-BW)/2;BY=H-BH-12}
 addEventListener('resize',rs);rs();
-let B=[],score=0,over=false,running=false,cur,next,aimX=180,cool=0,parts=[],t=0,comboT=0,combo=0,chainBest=0,warn=0,shake=0,texts=[],drops=0;
+let bombs=0,bombNext=1500,B=[],score=0,over=false,running=false,cur,next,aimX=180,cool=0,parts=[],t=0,comboT=0,combo=0,chainBest=0,warn=0,shake=0,texts=[],drops=0;
 const R=(a,b)=>a+Math.random()*(b-a);
-function rl(){const m=Math.min(4,Math.floor(drops/12)+2);return Math.floor(Math.random()*m)}
-function newGame(){B=[];score=0;over=false;parts=[];texts=[];cool=0;drops=0;combo=0;warn=0;cur=rl();next=rl();aimX=180;running=true;document.getElementById('menu').classList.add('hide');document.getElementById('over').classList.add('hide');last=performance.now();requestAnimationFrame(loop)}
+function rl(){const m=Math.min(5,Math.floor(drops/10)+2);return Math.floor(Math.random()*m)}
+function newGame(){bombs=0;bombNext=1500;updBomb();B=[];score=0;over=false;parts=[];texts=[];cool=0;drops=0;combo=0;warn=0;cur=rl();next=rl();aimX=180;running=true;document.getElementById('menu').classList.add('hide');document.getElementById('over').classList.add('hide');last=performance.now();requestAnimationFrame(loop)}
+function updBomb(){document.getElementById('bn').textContent=bombs;document.getElementById('bomb').classList.toggle('off',bombs<=0)}
+function useBomb(){if(!running||over||bombs<=0)return;let n=0;for(const b of B){if(b.l<=2){b.dead=true;n++;burst(b.x,b.y,PL[b.l].c[0],8)}}B=B.filter(b=>!b.dead);if(!n)return;bombs--;score+=n*5;shake=.8;beep(90,.5,'sawtooth',.1,3);texts.push({x:180,y:260,t:'💥 فرقعة! +'+n*5,l:1.2,c:'#ff9a5a'});updBomb()}
+document.getElementById('bomb').onclick=useBomb;
 function drop(){if(over||cool>0)return;const r=PL[cur].r;const x=Math.max(r+3,Math.min(360-r-3,aimX));B.push({x,y:30+r*0,vx:0,vy:0,l:cur,r,age:0,id:Math.random()});cur=next;next=rl();cool=.45;drops++;beep(300,.08,'triangle',.05)}
 function pos(e){const r=cv.getBoundingClientRect();return[(e.clientX-r.left-BX)/SC,(e.clientY-r.top-BY)/SC]}
 cv.addEventListener('pointerdown',e=>{if(!running||over)return;const[x]=pos(e);aimX=x;cv.setPointerCapture(e.pointerId);cv._d=1});
@@ -54,7 +59,8 @@ function step(dt){t+=dt;if(cool>0)cool-=dt;const SUB=4,h=dt/SUB;
  if(comboT>0){comboT-=dt;if(comboT<=0)combo=0}
  for(const p of parts){p.x+=p.vx*dt;p.y+=p.vy*dt;p.l-=dt}parts=parts.filter(p=>p.l>0);for(const x of texts)x.l-=dt;texts=texts.filter(x=>x.l>0);shake=Math.max(0,shake-dt*3)}
 let newB=[];
-function merge(a,b){const l=a.l+1;const x=(a.x+b.x)/2,y=(a.y+b.y)/2;combo++;comboT=1.2;const gain=(l+1)*(l+1)*combo;score+=gain;
+function merge(a,b){const l=a.l+1;const x=(a.x+b.x)/2,y=(a.y+b.y)/2;combo++;comboT=1.2;const gain=(l+1)*(l+1)*combo;score+=gain;while(score>=bombNext){bombs++;bombNext+=1500;updBomb();texts.push({x:180,y:200,t:'💣 +1 قنبلة',l:1.4,c:'#ff9a5a'})}
+ if(l>=3&&!sv.seen[l]){sv.seen[l]=1;score+=l*20;persist();texts.push({x:180,y:130,t:'🌟 أول مرة تعمل '+PL[l].n+'! +'+l*20,l:2,c:'#9fe'})}
  if(l>=10){score+=500;texts.push({x,y,t:'ثقب أسود! +500',l:1.6,c:'#c6f'});burst(x,y,'#c6f',50);shake=1;beep(80,.8,'sawtooth',.1,3);sv.maxLv=10;return}
  if(l>sv.maxLv){sv.maxLv=l}
  newB.push({x,y,vx:(a.vx+b.vx)/2,vy:(a.vy+b.vy)/2-40,l,r:PL[l].r,age:2,id:Math.random()});texts.push({x,y:y-PL[l].r,t:'+'+gain+(combo>1?' x'+combo:''),l:1,c:'#fd6'});burst(x,y,PL[l].c[0],14);shake=Math.max(shake,.2*(l/5));beep(260+l*55,.18,'sine',.07,1.5)}
